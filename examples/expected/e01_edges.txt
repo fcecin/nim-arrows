@@ -1,0 +1,3 @@
+ok(published #1 on /news/1)
+ok(published #2 on /news/1)
+err(no topic)

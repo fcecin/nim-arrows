@@ -1,0 +1,3 @@
+stored /chat#1
+rejected: empty payload
+stored /news#2

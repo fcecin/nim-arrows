@@ -1,0 +1,9 @@
+relay fails two times, and the third try works:
+  sending m1
+  ok(relay sent m1)
+relay fails all three tries, and lightpush answers:
+  sending m2
+  ok(lightpush sent m2)
+no provider at all:
+  sending m3
+  err(lightpush: RequestBroker(LightpushPublish): no provider registered for input signature)
