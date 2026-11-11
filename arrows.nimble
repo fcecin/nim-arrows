@@ -3,7 +3,7 @@ import std/strutils
 # Package
 version = "0.2.0"
 author = "Fabiana Cecin"
-description = "Kleisli arrows for nim-brokers requests, with composition and transformers."
+description = "Arrows for nim-brokers: typed connections that compose."
 license = "Unlicense"
 skipDirs = @["tests", "examples", "benchmarks"]
 

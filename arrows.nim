@@ -1,5 +1,5 @@
-## `arrows` gives each nim-brokers request its Kleisli arrow, and the
-## operations that compose and wrap arrows.
+## `arrows` gives each nim-brokers request its arrow, and the operations that
+## make, join and transform arrows.
 ##
 ## * `arrows/core` holds the arrow types, the procs that make arrows,
 ##   composition and the fallback.
