@@ -1,19 +1,19 @@
-## Middleware around edges, with no change to the providers.
+## Transformers around ports, with no change to the providers.
 ##
-## A message goes out through the edge `RelayPublish`. When the relay fails,
-## the message goes out through the edge `LightpushPublish`. The two providers
+## A message goes out through the port `RelayPublish`. When the relay fails,
+## the message goes out through the port `LightpushPublish`. The two providers
 ## are plain nim-brokers code. The composition adds these behaviors around
 ## them.
 ##
 ## * `retry` with `retryIf` runs the relay again only for an error that can go
 ##   away.
-## * `within` gives each edge a time limit.
-## * `label` puts the name of the edge in its error text.
+## * `within` gives each arrow a time limit.
+## * `label` puts the name of the port in its error text.
 ## * `orElse` goes to lightpush when the relay fails.
-## * `recover` gives a last answer when the two edges fail.
+## * `recover` gives a last answer when the two ports fail.
 ## * `tap` and `timed` show each message and the time of each send.
 ##
-## Run it with `nim c -r examples/e02_middleware.nim`.
+## Run it with `nim c -r examples/e02_transformers.nim`.
 
 import std/strutils
 import ../arrows
@@ -76,7 +76,7 @@ proc main() =
   echo "  ", waitFor send("a large message")
   echo "  relay runs: ", relayRuns[]
 
-  echo "No edge has a provider. The last answer has the two error texts:"
+  echo "No port has a provider. The last answer has the two error texts:"
   RelayPublish.clearProvider()
   LightpushPublish.clearProvider()
   echo "  ", waitFor send("m3")

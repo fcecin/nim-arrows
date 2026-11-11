@@ -1,4 +1,4 @@
-## Concurrency. These combinators start async arrows at the same time.
+## Concurrency. These operations start async arrows at the same time.
 ##
 ## * `both` runs two arrows on the same input.
 ## * `all` runs a list of arrows on the same input.
@@ -9,20 +9,20 @@
 ## the other.
 ##
 ## Fail fast. When one run of `both`, `all` or `mapAll` gives `err`, the
-## combinator cancels the runs that did not finish and gives that `err`. When
+## operation cancels the runs that did not finish and gives that `err`. When
 ## `firstOk` gets an `ok`, it cancels the other runs. A broker request that
-## gets a cancel sends the cancel to its provider. The combinator does not
+## gets a cancel sends the cancel to its provider. The operation does not
 ## wait until a cancelled run stops.
 ##
 ## When a run of `both`, `all`, `firstOk` or `mapAll` must wait, the
-## combinator makes one future for its answer. It puts one callback on each
+## operation makes one future for its answer. It puts one callback on each
 ## run, so the wait takes O(n) time for a list of n runs. `mapSeq` waits for
 ## one item at a time in an async proc.
 
 import ./core, ./private/answers
 
 # --- Helpers ------------------------------------------------------------------
-# When a run of `all`, `firstOk` or `mapAll` must wait, the combinator puts one
+# When a run of `all`, `firstOk` or `mapAll` must wait, the operation puts one
 # callback on each run that did not finish. The callback of run `i` gets `i` as
 # its `udata`, so it does not examine the list to find its run. The callbacks
 # complete the answer, which is a future that this module makes. A cancel of the

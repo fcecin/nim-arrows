@@ -46,7 +46,7 @@ discard Measure.setProvider(
     ok(s.len + extra)
 )
 
-suite "Edge.arrow":
+suite "Port.arrow":
   test "an async broker gives an Arrow":
     let p = Ping.arrow
     check p is Arrow[int, int]
@@ -57,19 +57,19 @@ suite "Edge.arrow":
     check m is SyncArrow[tuple[s: string, extra: int], int]
     check m((s: "abc", extra: 10)).get == 13
 
-  test "an edge arrow composes with the other arrows":
+  test "the arrow of a port composes with the other arrows":
     let show = arr(
       proc(x: int): string =
         "#" & $x
     )
     check run(Ping.arrow >>> Ping.arrow >>> show, 1).get == "#3"
 
-  test "a broker without parameters and an event type are not request edges":
+  test "a broker without parameters and an event type are not ports":
     check not compiles(GetCfg.arrow)
     check not compiles(Seen.arrow)
     check not compiles(GetCfg.provide(plus1))
 
-  test "an edge without a provider gives err":
+  test "a port without a provider gives err":
     check run(Pong.arrow, 1).isErr
 
   test "an exception in a provider becomes err":
@@ -110,8 +110,8 @@ suite "Edge.arrow":
     check votes.len == 2
     check votes[0].who.endsWith(":t")
 
-suite "Edge.provide":
-  test "a composition of edges becomes a new edge":
+suite "Port.provide":
+  test "an arrow through ports can provide a port":
     let show = arr(
       proc(x: int): string =
         "#" & $x
@@ -170,7 +170,7 @@ suite "Edge.provide":
     ).isOk
     check run(Vote.arrow(ctx), "x").get == @[Vote(who: "arrow:x")]
 
-suite "cancellation through an edge":
+suite "cancellation through a port":
   test "a cancel from within goes to the provider":
     scoped:
       let finished = new int

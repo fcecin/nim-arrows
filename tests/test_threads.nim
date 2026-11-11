@@ -14,7 +14,7 @@ var gResult: Atomic[int]
 var gFellBack: Atomic[bool]
 
 proc pipelineWorker() {.thread.} =
-  # This thread makes its own arrow of the edge, and composes it.
+  # This thread makes its own arrow of the port, and composes it.
   let pipeline =
     arr(
       proc(x: int): int =
@@ -25,7 +25,7 @@ proc pipelineWorker() {.thread.} =
   gDone.store(true)
 
 proc failingWorker() {.thread.} =
-  # The edge has no provider, so the fallback of this thread answers.
+  # The port has no provider, so the fallback of this thread answers.
   let r = waitFor MtDouble.arrow.orElse(
     arr(
       proc(x: int): int =
@@ -51,12 +51,12 @@ proc runInThread(worker: proc() {.thread, nimcall.}): bool =
   true
 
 suite "threads":
-  test "a worker thread composes an mt edge that the main thread provides":
+  test "a worker thread composes an mt port that the main thread provides":
     check MtDouble.provide(later(times2)).isOk
     check runInThread(pipelineWorker)
     check gResult.load() == 24
     MtDouble.clearProvider()
 
-  test "an mt edge without a provider gives err, and a fallback answers":
+  test "an mt port without a provider gives err, and a fallback answers":
     check runInThread(failingWorker)
     check gFellBack.load()

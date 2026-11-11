@@ -1,4 +1,4 @@
-## The behavior of the core combinators. The laws are in `test_laws`. This
+## The behavior of the core operations. The laws are in `test_laws`. This
 ## suite checks the sequence of the runs, the stop at the first `err`, and the
 ## error text of `orElse`. It also checks the fast paths, the adapters, and
 ## the copies of the values. The slow paths must keep heap values whole.
@@ -75,6 +75,28 @@ suite "fast paths":
     check not fut.completed()
     check (waitFor fut).get == 13
 
+suite "tap and ensure":
+  test "tap sees the value between two stages":
+    scoped:
+      let seen = new seq[int]
+      let pipe =
+        plus1 >>>
+        tap(
+          proc(x: int) =
+            seen[].add(x)
+        ) >>> later(times2)
+      check run(pipe, 5).get == 12
+      check seen[] == @[6]
+
+  test "ensure gives err when the predicate is false":
+    let positive = ensure(
+      proc(x: int): bool =
+        x > 0,
+      "not positive",
+    )
+    check run(positive, 3).get == 3
+    check run(positive, -3).error == "not positive"
+
 suite "adapters":
   test "catching changes an exception into err":
     let boom = catching[int, int](
@@ -105,9 +127,9 @@ suite "adapters":
     check run(s >>> a, 3).get == 3
 
 suite "heap values on the slow paths":
-  # The test makes the strings at run time. Thus a string that a combinator
+  # The test makes the strings at run time. Thus a string that an operation
   # reads from free memory shows as a broken string.
-  test "the slow paths of the combinators keep strings whole":
+  test "the slow paths of the operations keep strings whole":
     scoped:
       let up = arr(
         proc(x: string): string =
@@ -126,8 +148,8 @@ suite "heap values on the slow paths":
         check run(mapSeq(later(up)), @[a, a & "c"]).get == @[a & "!", a & "c!"]
 
 when defined(gcOrc) or defined(gcArc) or defined(gcAtomicArc):
-  # The copy hook counts the copies of a payload. The combinators give a
-  # value to the next stage without a copy. A combinator copies a value one
+  # The copy hook counts the copies of a payload. The operations give a
+  # value to the next stage without a copy. An operation copies a value one
   # time in three cases. A value goes from the future of a stage into a new
   # value or a new future. An input goes into a new output, because the
   # caller keeps its input. An input goes to a stage after a wait, because

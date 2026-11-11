@@ -1,4 +1,4 @@
-## The behavior of the transformers (the middleware tier).
+## The behavior of the transformers.
 
 import std/strutils
 import ./helpers
@@ -20,28 +20,6 @@ proc scripted(calls: ref int, errors: seq[string]): SyncArrow[int, int] =
       err(errors[calls[] - 1])
     else:
       ok(x)
-
-suite "tap and ensure":
-  test "tap sees the value between two stages":
-    scoped:
-      let seen = new seq[int]
-      let pipe =
-        plus1 >>>
-        tap(
-          proc(x: int) =
-            seen[].add(x)
-        ) >>> later(times2)
-      check run(pipe, 5).get == 12
-      check seen[] == @[6]
-
-  test "ensure gives err when the predicate is false":
-    let positive = ensure(
-      proc(x: int): bool =
-        x > 0,
-      "not positive",
-    )
-    check run(positive, 3).get == 3
-    check run(positive, -3).error == "not positive"
 
 suite "timed":
   test "timed reports the duration of a sync arrow":

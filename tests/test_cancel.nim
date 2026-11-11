@@ -1,11 +1,11 @@
-## The cancel contract. A combinator that waits and gets a cancel answers
+## The cancel contract. An operation that waits and gets a cancel answers
 ## `err("cancelled")` at once. It sends the cancel to the stage that runs, and
 ## it starts no new stage. A test cancels a run while a stage of the run
 ## waits, and then checks that no other stage starts. The last suite checks an
 ## inner `Answer` in the cancelled state.
 ##
 ## A stubborn stage does not stop when it gets a cancel. With a stubborn stage,
-## a test shows that the combinator stops by itself.
+## a test shows that the operation stops by itself.
 
 import std/strutils
 import ./helpers
@@ -58,7 +58,7 @@ EventBroker:
   type Tick = object
     n*: int
 
-suite "a cancel stops the core combinators":
+suite "a cancel stops the core operations":
   test ">>> starts no next stage":
     let s1 = new int
     let s2 = new int
@@ -96,7 +96,7 @@ suite "a cancel stops the core combinators":
     cancelWhileRunning(afterNow)
     check s2[] == 3
 
-  test "a combinator that gives the future of a stage sends the cancel to it":
+  test "an operation that gives the future of a stage sends the cancel to it":
     # The first stage is a sync stage, so `>>>` gives the future of the
     # second stage as its answer.
     let done = new int
@@ -161,7 +161,7 @@ suite "a cancel stops the transformers":
     check done[] == 0
 
 suite "a stage that goes on after a cancel":
-  # A cancel tells a stage to stop. A combinator does not wait until the stage
+  # A cancel tells a stage to stop. An operation does not wait until the stage
   # stops, and the work that the stage did stays done.
   test "retry after within starts a new run before the cancelled run stops":
     let starts = new int
@@ -187,7 +187,7 @@ suite "a stage that goes on after a cancel":
     waitFor sleepAsync(chronos.milliseconds(100))
     check running[] == 0
 
-suite "a cancel stops the concurrency combinators and drive":
+suite "a cancel stops the concurrency operations and drive":
   test "both, all, firstOk and mapAll answer at once, and cancel their runs":
     let done = new int
     let b = both(sleeper(plus1, 60, done), sleeper(plus1, 60, done))(1)
@@ -250,9 +250,9 @@ suite "a cancel stops the concurrency combinators and drive":
       check errors[].len == 0
 
 suite "an Answer in the cancelled state":
-  # The combinators treat an inner `Answer` in the cancelled state as a
+  # The operations treat an inner `Answer` in the cancelled state as a
   # failure of that stage, and they do not wait without end.
-  test "the waiting combinators give err":
+  test "the waiting operations give err":
     let b = broken()
     check bounded(b >>> plus1, 1).error == "cancelled"
     check bounded(b >>> later(plus1), 1).error == "cancelled"

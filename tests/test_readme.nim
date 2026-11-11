@@ -20,7 +20,7 @@ RequestBroker:
 
 # The first code block of the README.
 
-# Each broker is an edge. It is a plain nim-brokers declaration.
+# Each broker is a port. It is a plain nim-brokers declaration.
 RequestBroker(sync):
   proc Validate(env: Envelope): Result[Envelope, string]
 RequestBroker:
@@ -30,11 +30,11 @@ RequestBroker:
 RequestBroker:
   proc Send(env: Envelope): Future[Result[string, string]] {.async.}
 
-# One line makes a new edge from three edges. The compiler checks the types at
-# each seam.
+# One line gives the port `Send` an arrow through three ports. The compiler
+# checks the types at each seam.
 discard Send.provide(Validate.arrow >>> Stamp.arrow >>> Publish.arrow)
 
-# Middleware around an edge, with no change to its provider.
+# A retry, a time limit and a fallback, with no change to the providers.
 let relay = RelayPublish.arrow.retry(3, 5.milliseconds, 2).within(200.milliseconds)
 let sendAny = relay.orElse(LightpushPublish.arrow)
 
@@ -75,7 +75,7 @@ suite "README":
     for b in blocks:
       check b.strip in self
 
-  test "the second code block selects the edge from the message":
+  test "the second code block selects the port from the message":
     discard RelayPublish.setProvider(
       proc(msg: string): Future[Result[string, string]] {.async.} =
         return ok("relay: " & msg)
@@ -91,6 +91,6 @@ suite "README":
     RelayPublish.clearProvider()
     LightpushPublish.clearProvider()
 
-  test "an edge without a provider gives err":
+  test "a port without a provider gives err":
     check run(route, "short").isErr
     check run(sendAny, "m").isErr

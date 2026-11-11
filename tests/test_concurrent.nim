@@ -1,4 +1,4 @@
-## The behavior of the concurrency combinators. The timing checks use waits
+## The behavior of the concurrency operations. The timing checks use waits
 ## that are much longer than the event loop needs, so that the checks are
 ## stable on a busy machine.
 
@@ -11,7 +11,7 @@ proc elapsed(t0: Moment): Duration =
   Moment.now() - t0
 
 suite "kinds":
-  test "the concurrent combinators and within take async arrows":
+  test "the concurrent operations and within take async arrows":
     let a = now(plus1)
     check not compiles(both(plus1, plus1))
     check not compiles(all(@[plus1]))

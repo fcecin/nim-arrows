@@ -1,26 +1,8 @@
-## Transformers, the middleware tier. A transformer takes an arrow and gives
-## an arrow with an added behavior. The stage inside does not change. Use a
-## transformer to add observation, timing, retries or error mapping to a
-## stage, and a timeout to an async stage. A broker edge is a stage too.
+## Transformers. A transformer takes an arrow and gives an arrow with an added
+## behavior. The arrow inside does not change. Use a transformer to add
+## timing, retries, error mapping or a time limit to an arrow.
 
 import ./core, ./private/answers
-
-proc tap*[A](f: proc(a: A) {.gcsafe, raises: [].}): SyncArrow[A, A] =
-  ## Calls `f` with the value, and passes the value on without a change.
-  result = proc(a: A): Result[A, string] {.gcsafe, raises: [].} =
-    f(a)
-    ok(a)
-
-proc ensure*[A](
-    pred: proc(a: A): bool {.gcsafe, raises: [].}, reason: string
-): SyncArrow[A, A] =
-  ## A guard stage. It gives the value back when `pred` is true. It gives
-  ## `err(reason)` when `pred` is false.
-  result = proc(a: A): Result[A, string] {.gcsafe, raises: [].} =
-    if pred(a):
-      ok(a)
-    else:
-      err(reason)
 
 # --- timed --------------------------------------------------------------------
 

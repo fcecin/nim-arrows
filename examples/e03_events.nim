@@ -1,7 +1,7 @@
 ## Events drive a pipeline, and the pipeline emits events.
 ##
 ## Each `MessageReceived` event runs a pipeline. The pipeline checks the
-## message, stores it through an edge, and emits `MessageStored`. A failed
+## message, stores it through a port, and emits `MessageStored`. A failed
 ## run goes to the error sink. The listener of `MessageStored` is plain
 ## nim-brokers code.
 ##

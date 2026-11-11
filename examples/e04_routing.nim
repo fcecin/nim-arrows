@@ -1,7 +1,7 @@
-## Many providers of one edge.
+## Many providers of one port.
 ##
-## Three store nodes provide the same edge `StoreQuery`. Each node has its own
-## broker context, which is its address. `StoreQuery.arrow(ctx)` is the edge
+## Three store nodes provide the same port `StoreQuery`. Each node has its own
+## broker context, which is its address. `StoreQuery.arrow(ctx)` is the arrow
 ## to one node. The nodes answer after different times.
 ##
 ## * `firstOk` asks all the nodes and keeps the first `ok`. The other runs get
@@ -10,7 +10,7 @@
 ## * `both` asks two nodes and gives the two answers as a tuple.
 ## * `mapAll` publishes a list of messages at the same time.
 ## * `mapSeq` publishes a list of messages one after the other.
-## * A proc with the shape of an arrow selects an edge from the message.
+## * A proc with the shape of an arrow selects a port from the message.
 ##
 ## Run it with `nim c -r examples/e04_routing.nim`.
 
@@ -56,7 +56,7 @@ proc main() =
   echo "at the same time: ", waitFor mapAll(RelayPublish.arrow)(@["m1", "m2", "m3"])
   echo "one after the other: ", waitFor mapSeq(RelayPublish.arrow)(@["m4", "m5"])
 
-  # A stage that selects an edge is usual Nim code.
+  # A stage that selects a port is usual Nim code.
   let route: Arrow[string, string] = proc(
       msg: string
   ): Future[Result[string, string]] {.async: (raises: []).} =

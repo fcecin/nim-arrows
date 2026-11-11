@@ -1,13 +1,13 @@
-## An edge from another broker context.
+## A port that a different broker context provides.
 ##
 ## A broker context is the address of a set of providers. In this example,
 ## two nodes have their own contexts. One shared service provides `Publish`
 ## in a third context.
 ##
-## The composition gives each node its own edge `Send`. This edge changes an
-## `Envelope` into a `Stamped` message. Then it calls the shared `Publish`
-## through a link with a time limit and a name. A node calls `Send` in its own
-## context, and it does not know the shared context.
+## The composition provides the port `Send` in the context of each node. The
+## arrow of `Send` changes an `Envelope` into a `Stamped` message. Then it
+## goes to the shared `Publish`, with a time limit and a name. A node calls
+## `Send` in its own context, and it does not know the shared context.
 ##
 ## Run it with `nim c -r examples/e05_links.nim`.
 

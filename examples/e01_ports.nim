@@ -1,14 +1,14 @@
-## A new edge from three edges.
+## A port that an arrow through three ports provides.
 ##
 ## `Validate`, `Stamp` and `Publish` are request brokers. Each one has a plain
-## nim-brokers provider. One line composes the three brokers into the provider
-## of a fourth broker, `Send`. The compiler makes sure that the output type of
-## each edge is the input type of the next edge.
+## nim-brokers provider. One line makes an arrow through the three ports, and
+## makes that arrow the provider of a fourth port, `Send`. The compiler makes
+## sure that the output type of each arrow is the input type of the next arrow.
 ##
 ## A caller of `Send` sees a broker. It does not see the composition. The
 ## three providers do not see it either.
 ##
-## Run it with `nim c -r examples/e01_edges.nim`.
+## Run it with `nim c -r examples/e01_ports.nim`.
 
 import ../arrows
 

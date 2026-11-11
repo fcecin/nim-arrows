@@ -15,15 +15,15 @@
 ## result is an async arrow. `toAsync` changes a sync arrow into an async
 ## arrow, and it keeps composition.
 ##
-## Cost model. A sync stage makes no future. When a combinator ends with an
+## Cost model. A sync stage makes no future. When an operation ends with an
 ## async stage, it gives the future of that stage when it can. In the other
 ## cases, it makes one completed future for its answer. When a stage must
-## wait, a combinator of this module goes on in an async proc. That proc
+## wait, an operation of this module goes on in an async proc. That proc
 ## makes one future for its answer, and one or two more futures for each wait.
 ##
 ## Error model. An arrow reports a failure with `err`. It does not raise. A
 ## cancelled arrow also answers with `err`. `>>>` stops at the first `err`. A
-## combinator that waits and gets a cancel answers `err("cancelled")` at once.
+## operation that waits and gets a cancel answers `err("cancelled")` at once.
 ## It sends the cancel to the stage that runs, and it starts no new stage. The
 ## stage can continue to run after this answer, until it obeys the cancel.
 
@@ -66,6 +66,23 @@ proc arr*[A, B](f: proc(a: A): B {.gcsafe, raises: [].}): SyncArrow[A, B] =
   result = proc(a: A): Result[B, string] {.gcsafe, raises: [].} =
     ok(f(a))
 
+proc tap*[A](f: proc(a: A) {.gcsafe, raises: [].}): SyncArrow[A, A] =
+  ## Calls `f` with the value, and passes the value on without a change.
+  result = proc(a: A): Result[A, string] {.gcsafe, raises: [].} =
+    f(a)
+    ok(a)
+
+proc ensure*[A](
+    pred: proc(a: A): bool {.gcsafe, raises: [].}, reason: string
+): SyncArrow[A, A] =
+  ## A guard stage. It gives the value back when `pred` is true. It gives
+  ## `err(reason)` when `pred` is false.
+  result = proc(a: A): Result[A, string] {.gcsafe, raises: [].} =
+    if pred(a):
+      ok(a)
+    else:
+      err(reason)
+
 proc toAsync*[A, B](f: SyncArrow[A, B]): Arrow[A, B] =
   ## Changes a sync arrow into an async arrow. Each call makes one completed
   ## future. Use it for an operation that takes only async arrows, as `within`
@@ -92,7 +109,7 @@ proc catching*[A, B](
 
 # --- Helpers ------------------------------------------------------------------
 # The procs named `...Slow` run only when an async stage must wait. A fast
-# path in each combinator handles a stage that completes immediately. `G` is
+# path in each operation handles a stage that completes immediately. `G` is
 # the concrete type of an arrow parameter, sync or async. The slow paths wait
 # with `waitStage`, so a run that gets a cancel starts no new stage. They give
 # a value from a future to the next stage in place, with `value().get`, so

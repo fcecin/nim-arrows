@@ -81,23 +81,23 @@ bench("arrows, sync call", N):
 bench("arrows, await answerOf", N):
   acc += (await answerOf(pure, i)).get
 
-# 3 broker edges.
-proc handEdges(x: int): Future[Result[int, string]] {.async: (raises: []).} =
+# 3 ports.
+proc handPorts(x: int): Future[Result[int, string]] {.async: (raises: []).} =
   let a = (await Ping.request(x)).valueOr:
     return err(error)
   let b = (await Ping.request(a)).valueOr:
     return err(error)
   await Ping.request(b)
 
-let edges3 = Ping.arrow >>> Ping.arrow >>> Ping.arrow
+let ports3 = Ping.arrow >>> Ping.arrow >>> Ping.arrow
 
-echo "3 broker edges"
+echo "3 ports"
 bench("hand-written", M):
-  acc += (await handEdges(i)).get
+  acc += (await handPorts(i)).get
 bench("arrows", M):
-  acc += (await edges3(i)).get
+  acc += (await ports3(i)).get
 
-# 4 pure stages and 2 broker edges.
+# 4 pure stages and 2 ports.
 proc handMixed(x: int): Future[Result[int, string]] {.async: (raises: []).} =
   let a = (await Ping.request(incf(x))).valueOr:
     return err(error)
@@ -108,13 +108,13 @@ proc handMixed(x: int): Future[Result[int, string]] {.async: (raises: []).} =
 let mixed =
   arr(incf) >>> Ping.arrow >>> arr(incf) >>> arr(incf) >>> Ping.arrow >>> arr(incf)
 
-echo "4 pure stages and 2 broker edges"
+echo "4 pure stages and 2 ports"
 bench("hand-written", M):
   acc += (await handMixed(i)).get
 bench("arrows", M):
   acc += (await mixed(i)).get
 
-# A fallback where the first two edges fail.
+# A fallback where the first two ports fail.
 proc handFallback(x: int): Future[Result[int, string]] {.async: (raises: []).} =
   let a = await Down.request(x)
   if a.isOk:
@@ -126,23 +126,23 @@ proc handFallback(x: int): Future[Result[int, string]] {.async: (raises: []).} =
 
 let fallback = Down.arrow.orElse(Down.arrow).orElse(Ping.arrow)
 
-echo "fallback: two edges fail, the third edge answers"
+echo "fallback: two ports fail, the third port answers"
 bench("hand-written", M):
   acc += (await handFallback(i)).get
 bench("arrows", M):
   acc += (await fallback(i)).get
 
-# Middleware around one edge.
+# Middleware around one port.
 let guarded = retry(within(Ping.arrow, chronos.seconds(1)), 3).label("ping")
 
-echo "middleware: label (retry (within edge))"
-bench("bare edge", M):
+echo "transformers: label (retry (within port))"
+bench("bare request", M):
   acc += (await Ping.request(i)).get
 bench("arrows", M):
   acc += (await guarded(i)).get
 
 # The same pipelines, with providers that wait one turn of the event loop.
-proc handEdgesLater(x: int): Future[Result[int, string]] {.async: (raises: []).} =
+proc handPortsLater(x: int): Future[Result[int, string]] {.async: (raises: []).} =
   let a = (await Later.request(x)).valueOr:
     return err(error)
   let b = (await Later.request(a)).valueOr:
@@ -156,21 +156,21 @@ proc handMixedLater(x: int): Future[Result[int, string]] {.async: (raises: []).}
     return err(error)
   ok(incf(b))
 
-let edges3Later = Later.arrow >>> Later.arrow >>> Later.arrow
+let ports3Later = Later.arrow >>> Later.arrow >>> Later.arrow
 let mixedLater =
   arr(incf) >>> Later.arrow >>> arr(incf) >>> arr(incf) >>> Later.arrow >>> arr(incf)
 let guardedLater = retry(within(Later.arrow, chronos.seconds(1)), 3).label("later")
 
 echo "providers that wait one turn of the event loop"
-bench("bare edge", M):
+bench("bare request", M):
   acc += (await Later.request(i)).get
-bench("3 edges, hand-written", M):
-  acc += (await handEdgesLater(i)).get
-bench("3 edges, arrows", M):
-  acc += (await edges3Later(i)).get
-bench("4 pure stages and 2 edges, hand-written", M):
+bench("3 ports, hand-written", M):
+  acc += (await handPortsLater(i)).get
+bench("3 ports, arrows", M):
+  acc += (await ports3Later(i)).get
+bench("4 pure stages and 2 ports, hand-written", M):
   acc += (await handMixedLater(i)).get
-bench("4 pure stages and 2 edges, arrows", M):
+bench("4 pure stages and 2 ports, arrows", M):
   acc += (await mixedLater(i)).get
-bench("label (retry (within edge)), arrows", M):
+bench("label (retry (within port)), arrows", M):
   acc += (await guardedLater(i)).get

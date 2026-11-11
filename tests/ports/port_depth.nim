@@ -1,4 +1,4 @@
-## An edge module. It declares the request broker `Depth`. It imports no node
+## A port module. It declares the request broker `Depth`. It imports no node
 ## module.
 
 import chronos, results, brokers/request_broker

@@ -1,8 +1,9 @@
 ## `arrows` gives each nim-brokers request its Kleisli arrow, and the
 ## operations that compose and wrap arrows.
 ##
-## * `arrows/core` holds the arrow types, composition and the fallback.
-## * `arrows/transformers` holds the middleware tier.
+## * `arrows/core` holds the arrow types, the procs that make arrows,
+##   composition and the fallback.
+## * `arrows/transformers` holds the transformers.
 ## * `arrows/concurrent` holds concurrent runs.
 ## * `arrows/brokers` holds the bridge to request and event brokers.
 

@@ -1,7 +1,7 @@
-## Node A. It provides `Ping` and calls `Pong`. It imports edge modules only.
+## Node A. It provides `Ping` and calls `Pong`. It imports port modules only.
 
 import ../../arrows
-import ./edge_ping, ./edge_pong
+import ./port_ping, ./port_pong
 
 proc startA*(): Result[void, string] =
   ## Makes `Ping` a provider. `Ping(0)` is 0. `Ping(n)` is `Pong(n - 1) + 1`.
