@@ -1,0 +1,8 @@
+old code: ok(@["old-/news"])
+old code, no name: err(the topic has no name)
+cache: ok(@["peer-a", "peer-b"])
+cache, then the port: ok(@["remote-/news"])
+quick, from the cache: ok(@["peer-a", "peer-b"])
+quick, from the port: ok(@["remote-/news"])
+cache with a time limit: ok(@["peer-a", "peer-b"])
+cache with a clear error: err(peers of the topic: not in the cache)

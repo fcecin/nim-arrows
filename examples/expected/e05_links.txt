@@ -1,3 +1,5 @@
 ok(alice published hi on /chat)
 ok(bob published hello on /chat)
+ok(carol published hey on /chat)
+after the scope closes, the port gives err: true
 err(shared publish: RequestBroker(Publish): no provider registered for broker context 00000002)

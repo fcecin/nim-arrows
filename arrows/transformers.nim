@@ -47,6 +47,19 @@ type RetryIf* = proc(e: string): bool {.gcsafe, raises: [].}
 proc again(retryIf: RetryIf, e: string): bool {.inline.} =
   retryIf.isNil or retryIf(e)
 
+const longestPause = nanoseconds(high(int64) div 2)
+  ## The longest pause of `retry`. It is more than 100 years, and a timer of
+  ## chronos can hold it.
+
+proc grow(pause: Duration, factor: int): Duration =
+  ## The pause after `pause`. It stops at `longestPause`, so the
+  ## multiplication can not overflow.
+  let f = int64(max(1, factor))
+  if pause.nanoseconds > longestPause.nanoseconds div f:
+    longestPause
+  else:
+    pause * f
+
 proc retry*[A, B](
     f: SyncArrow[A, B], attempts: int, retryIf: RetryIf = nil
 ): SyncArrow[A, B] =
@@ -70,7 +83,7 @@ proc retrySlow[A, B](
 ): Future[Result[B, string]] {.async: (raises: []).} =
   var cancelled = false
   var fut = first
-  var pause = backoff
+  var pause = min(backoff, longestPause)
   var n = 1
   while true:
     waitStage(fut, cancelled)
@@ -83,7 +96,7 @@ proc retrySlow[A, B](
       discard awaitne slept
       if slept.cancelled():
         return err("cancelled")
-      pause = pause * max(1, factor)
+      pause = grow(pause, factor)
     fut = f(a)
     inc n
 

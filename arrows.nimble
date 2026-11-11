@@ -23,7 +23,10 @@ task test, "Run the test suites":
     exec "nim c -r --outdir:build --hints:off tests/" & t & ".nim"
 
 task examples, "Compile and run the examples, and compare their output":
-  for ex in ["e01_ports", "e02_transformers", "e03_events", "e04_routing", "e05_links"]:
+  for ex in [
+    "e01_ports", "e02_transformers", "e03_events", "e04_routing", "e05_links",
+    "e06_adapters",
+  ]:
     exec "nim c --outdir:build --hints:off examples/" & ex & ".nim"
     let (output, code) = gorgeEx("build/" & ex)
     if code != 0:

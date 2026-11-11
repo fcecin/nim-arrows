@@ -115,6 +115,12 @@ suite "adapters":
     )
     check run(stop, 1).error == "cancelled"
 
+  test "answer gives a completed Answer":
+    let fut = answer(Result[int, string].ok(5))
+    check fut.completed()
+    check fut.value().get == 5
+    check answer(Result[int, string].err("no")).value().error == "no"
+
   test "answerOf runs the two kinds in the same way":
     check (waitFor answerOf(plus1, 1)).get == 2
     check (waitFor answerOf(later(plus1), 1)).get == 2

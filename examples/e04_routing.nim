@@ -10,11 +10,13 @@
 ## * `both` asks two nodes and gives the two answers as a tuple.
 ## * `mapAll` publishes a list of messages at the same time.
 ## * `mapSeq` publishes a list of messages one after the other.
+## * A `MultiRequestBroker` has many providers in one context. Its arrow gives
+##   the answers of all of them.
 ## * A proc with the shape of an arrow selects a port from the message.
 ##
 ## Run it with `nim c -r examples/e04_routing.nim`.
 
-import std/[sequtils, strutils]
+import std/[algorithm, sequtils, strutils]
 import ../arrows
 
 RequestBroker:
@@ -26,12 +28,24 @@ RequestBroker:
 RequestBroker:
   proc LightpushPublish(msg: string): Future[Result[string, string]] {.async.}
 
+MultiRequestBroker:
+  type Health = object
+    part*: string
+
+  proc signature*(node: string): Future[Result[Health, string]] {.async: (raises: []).}
+
 proc startStore(ctx: BrokerContext, name: string, delayMs: int) =
   discard StoreQuery.setProvider(
     ctx,
     proc(topic: string): Future[Result[string, string]] {.async.} =
       await sleepAsync(chronos.milliseconds(delayMs))
       return ok(name & " has 3 messages on " & topic),
+  )
+
+proc startPart(part: string) =
+  discard Health.setProvider(
+    proc(node: string): Future[Result[Health, string]] {.async.} =
+      ok(Health(part: part & " of " & node))
   )
 
 proc main() =
@@ -55,6 +69,15 @@ proc main() =
   )
   echo "at the same time: ", waitFor mapAll(RelayPublish.arrow)(@["m1", "m2", "m3"])
   echo "one after the other: ", waitFor mapSeq(RelayPublish.arrow)(@["m4", "m5"])
+
+  # Two parts of one node answer the same port.
+  startPart("relay")
+  startPart("store")
+  let names = arr(
+    proc(answers: seq[Health]): seq[string] =
+      sorted(answers.mapIt(it.part))
+  )
+  echo "answers from one port: ", waitFor (Health.arrow >>> names)("node-1")
 
   # A stage that selects a port is usual Nim code.
   let route: Arrow[string, string] = proc(

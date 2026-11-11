@@ -3,5 +3,6 @@ all answers: ok(@["store-a has 3 messages on /news", "store-b has 3 messages on 
 two answers: ok(("store-a has 3 messages on /news", "store-b has 3 messages on /news"))
 at the same time: ok(@["relay: m1", "relay: m2", "relay: m3"])
 one after the other: ok(@["relay: m4", "relay: m5"])
+answers from one port: ok(@["relay of node-1", "store of node-1"])
 ok(relay: short message)
 ok(lightpush: 35 bytes)

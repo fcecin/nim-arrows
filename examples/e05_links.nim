@@ -9,8 +9,12 @@
 ## goes to the shared `Publish`, with a time limit and a name. A node calls
 ## `Send` in its own context, and it does not know the shared context.
 ##
+## A `BrokerScope` can own the port of a node. When the scope closes, the port
+## has no provider.
+##
 ## Run it with `nim c -r examples/e05_links.nim`.
 
+import brokers/broker_scope
 import ../arrows
 
 type
@@ -35,8 +39,9 @@ proc startShared(shared: BrokerContext) =
       return ok(msg.origin & " published " & msg.env.payload & " on " & msg.env.topic),
   )
 
-proc link(node: BrokerContext, name: string, shared: BrokerContext) =
-  ## Makes `Send` in the context `node` from `Publish` in the context `shared`.
+proc link[W](node: W, name: string, shared: BrokerContext) =
+  ## Makes `Send` in the context or the scope `node` from `Publish` in the
+  ## context `shared`.
   let stamp = arr(
     proc(env: Envelope): Stamped =
       Stamped(env: env, origin: name)
@@ -54,6 +59,14 @@ proc main() =
 
   echo waitFor Send.request(alice, Envelope(topic: "/chat", payload: "hi"))
   echo waitFor Send.request(bob, Envelope(topic: "/chat", payload: "hello"))
+
+  # The scope of a third node owns its port. The port goes when the scope closes.
+  let carol = newBrokerScope()
+  link(carol, "carol", shared)
+  echo waitFor Send.request(carol.ctx, Envelope(topic: "/chat", payload: "hey"))
+  waitFor carol.close()
+  let late = waitFor Send.request(carol.ctx, Envelope(topic: "/chat", payload: "bye"))
+  echo "after the scope closes, the port gives err: ", late.isErr
 
   # The shared service stops. Each node gets an error with the name of the link.
   Publish.clearProvider(shared)

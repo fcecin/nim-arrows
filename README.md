@@ -110,7 +110,8 @@ let route: Arrow[string, string] = proc(
 | `e02_transformers.nim` | A retry, a time limit, a fallback and a last answer around two ports. |
 | `e03_events.nim` | Events that drive a pipeline, and a pipeline that emits events. |
 | `e04_routing.nim` | Many providers of one port, with a race, a fan-out and a route. |
-| `e05_links.nim` | A port that a node gets from a different broker context. |
+| `e05_links.nim` | A port that a node gets from a different broker context, and a scope that owns a port. |
+| `e06_adapters.nim` | Arrows from code that raises, from a cache and from a plain proc. |
 
 ## Laws
 

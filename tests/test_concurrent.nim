@@ -155,6 +155,11 @@ suite "mapAll and mapSeq":
       check run(mapSeq(later(rec)), @[4, -2, 9]).error == "negative -2"
       check count[] == 2
 
+  test "mapAll and mapSeq of an empty list give an empty list":
+    check run(mapAll(later(plus1)), newSeq[int]()).get.len == 0
+    check run(mapSeq(later(plus1)), newSeq[int]()).get.len == 0
+    check mapSeq(plus1)(newSeq[int]()).get.len == 0
+
   test "mapSeq of a sync arrow is a sync arrow":
     let m = mapSeq(pickyBase)
     check m is SyncArrow[seq[int], seq[int]]

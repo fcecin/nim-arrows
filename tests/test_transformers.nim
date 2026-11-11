@@ -89,6 +89,25 @@ suite "retry":
     # The pauses are 20 ms and then 40 ms.
     check Moment.now() - t0 >= chronos.milliseconds(55)
 
+  test "a large factor does not make the pause overflow":
+    # The second pause is larger than the largest `Duration`.
+    let calls = new int
+    let f = retry(flaky(calls, 10), 2, chronos.nanoseconds(2), high(int))
+    check run(f, 1).error == "transient 2"
+    check calls[] == 2
+
+  test "the longest pause is a pause that the timer can hold":
+    # The second pause and a first pause of `InfiniteDuration` are the longest
+    # pause. The run waits in that pause until the time limit cancels it.
+    let calls = new int
+    let grows = retry(flaky(calls, 10), 3, chronos.nanoseconds(2), high(int))
+    check "timed out" in run(within(grows, chronos.milliseconds(30)), 1).error
+    check calls[] == 2
+    calls[] = 0
+    let waits = retry(flaky(calls, 10), 3, InfiniteDuration)
+    check "timed out" in run(within(waits, chronos.milliseconds(30)), 1).error
+    check calls[] == 1
+
 suite "retry with retryIf":
   let busy: RetryIf = proc(e: string): bool =
     e.startsWith("busy")
