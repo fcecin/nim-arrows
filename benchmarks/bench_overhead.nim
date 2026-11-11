@@ -1,9 +1,10 @@
 ## The cost of `arrows` compared with hand-written code. Run it with
 ## `nimble bench`, or with `nim c -r -d:release benchmarks/bench_overhead.nim`.
 ##
-## The `naive` rows use a design with one async closure for each stage. The
-## `arrows` rows use this library. The broker providers complete immediately,
-## so the rows show only the cost of the plumbing.
+## In the first sections, each broker provider completes immediately, so the
+## rows show only the cost of the plumbing. In the last section, each provider
+## waits one turn of the event loop, as a provider that does input or output
+## does.
 
 import std/[monotimes, strutils, times]
 import ../arrows
@@ -14,6 +15,19 @@ RequestBroker:
 RequestBroker:
   proc Down(n: int): Future[Result[int, string]] {.async.}
 
+RequestBroker:
+  proc Later(n: int): Future[Result[int, string]] {.async.}
+
+proc turn(): Future[void].Raising([CancelledError]) =
+  ## Completes in the next turn of the event loop, without a timer.
+  let fut = Future[void].Raising([CancelledError]).init("turn")
+  proc fire(udata: pointer) {.gcsafe, raises: [].} =
+    if not fut.finished():
+      fut.complete()
+
+  callSoon(fire, nil)
+  fut
+
 discard Ping.setProvider(
   proc(n: int): Future[Result[int, string]] {.async.} =
     ok(n + 1)
@@ -22,26 +36,11 @@ discard Down.setProvider(
   proc(n: int): Future[Result[int, string]] {.async.} =
     err("down")
 )
-
-# --- The naive design, with an async closure for each stage -------------------
-
-type Naive[A, B] = proc(a: A): Future[Result[B, string]] {.gcsafe.}
-
-proc naiveArr[A, B](f: proc(a: A): B {.gcsafe, raises: [].}): Naive[A, B] =
-  result = proc(a: A): Future[Result[B, string]] {.async, gcsafe.} =
-    ok(f(a))
-
-proc naiveThen[A, B, C](f: Naive[A, B], g: Naive[B, C]): Naive[A, C] =
-  result = proc(a: A): Future[Result[C, string]] {.async, gcsafe.} =
-    let b = (await f(a)).valueOr:
-      return err(error)
-    await g(b)
-
-proc naiveEdge(): Naive[int, int] =
-  result = proc(x: int): Future[Result[int, string]] {.async, gcsafe.} =
-    await Ping.request(x)
-
-# --- Harness ------------------------------------------------------------------
+discard Later.setProvider(
+  proc(n: int): Future[Result[int, string]] {.async.} =
+    await turn()
+    return ok(n + 1)
+)
 
 proc incf(x: int): int {.gcsafe, raises: [].} =
   x + 1
@@ -55,7 +54,7 @@ template bench(name: string, n: int, body: untyped) =
         {.cast(gcsafe).}:
           body
       let dt = getMonoTime() - t0
-      echo "  ", alignLeft(name, 40), align($(dt.inNanoseconds div n), 6), " ns/call"
+      echo "  ", alignLeft(name, 44), align($(dt.inNanoseconds div n), 6), " ns/call"
       doAssert acc != 0
 
     waitFor go()
@@ -64,26 +63,22 @@ const N = 1_000_000
 const M = 300_000
 
 # 10 pure stages.
-proc handPureAsync(x: int): Future[Result[int, string]] {.async: (raises: []).} =
+proc handPure(x: int): Future[Result[int, string]] {.async: (raises: []).} =
   var v = x
   for k in 0 ..< 10:
     v = incf(v)
   ok(v)
 
-var naivePure = naiveArr(incf)
 var pure = arr(incf)
 for k in 1 ..< 10:
-  naivePure = naiveThen(naivePure, naiveArr(incf))
   pure = pure >>> arr(incf)
 
 echo "10 pure stages"
 bench("hand-written async proc", N):
-  acc += (await handPureAsync(i)).get
-bench("naive", N):
-  acc += (await naivePure(i)).get
-bench("arrows (a SyncArrow, sync call)", N):
+  acc += (await handPure(i)).get
+bench("arrows, sync call", N):
   acc += pure(i).get
-bench("arrows (await answerOf)", N):
+bench("arrows, await answerOf", N):
   acc += (await answerOf(pure, i)).get
 
 # 3 broker edges.
@@ -94,15 +89,11 @@ proc handEdges(x: int): Future[Result[int, string]] {.async: (raises: []).} =
     return err(error)
   await Ping.request(b)
 
-let naiveE = naiveEdge()
-let naive3 = naiveThen(naiveThen(naiveE, naiveE), naiveE)
 let edges3 = Ping.arrow >>> Ping.arrow >>> Ping.arrow
 
 echo "3 broker edges"
-bench("hand-written awaits", M):
+bench("hand-written", M):
   acc += (await handEdges(i)).get
-bench("naive", M):
-  acc += (await naive3(i)).get
 bench("arrows", M):
   acc += (await edges3(i)).get
 
@@ -114,27 +105,16 @@ proc handMixed(x: int): Future[Result[int, string]] {.async: (raises: []).} =
     return err(error)
   ok(incf(b))
 
-let naiveMixed = naiveThen(
-  naiveThen(
-    naiveThen(
-      naiveThen(naiveThen(naiveArr(incf), naiveE), naiveArr(incf)), naiveArr(incf)
-    ),
-    naiveE,
-  ),
-  naiveArr(incf),
-)
 let mixed =
   arr(incf) >>> Ping.arrow >>> arr(incf) >>> arr(incf) >>> Ping.arrow >>> arr(incf)
 
 echo "4 pure stages and 2 broker edges"
 bench("hand-written", M):
   acc += (await handMixed(i)).get
-bench("naive", M):
-  acc += (await naiveMixed(i)).get
 bench("arrows", M):
   acc += (await mixed(i)).get
 
-# A fallback chain where the first two edges fail.
+# A fallback where the first two edges fail.
 proc handFallback(x: int): Future[Result[int, string]] {.async: (raises: []).} =
   let a = await Down.request(x)
   if a.isOk:
@@ -144,12 +124,12 @@ proc handFallback(x: int): Future[Result[int, string]] {.async: (raises: []).} =
     return b
   await Ping.request(x)
 
-let fallback = Down.arrow <+> Down.arrow <+> Ping.arrow
+let fallback = Down.arrow.orElse(Down.arrow).orElse(Ping.arrow)
 
-echo "fallback: two edges fail, the third answers"
+echo "fallback: two edges fail, the third edge answers"
 bench("hand-written", M):
   acc += (await handFallback(i)).get
-bench("arrows (<+>)", M):
+bench("arrows", M):
   acc += (await fallback(i)).get
 
 # Middleware around one edge.
@@ -161,29 +141,36 @@ bench("bare edge", M):
 bench("arrows", M):
   acc += (await guarded(i)).get
 
-# Fan-out of a 1 KiB message to two stages. The loop takes the two messages
-# in turn, so the C compiler can not move the work out of the loop.
-type Message = object
-  payload: seq[byte]
+# The same pipelines, with providers that wait one turn of the event loop.
+proc handEdgesLater(x: int): Future[Result[int, string]] {.async: (raises: []).} =
+  let a = (await Later.request(x)).valueOr:
+    return err(error)
+  let b = (await Later.request(a)).valueOr:
+    return err(error)
+  await Later.request(b)
 
-proc payloadSize(m: Message): int {.gcsafe, raises: [].} =
-  m.payload.len
+proc handMixedLater(x: int): Future[Result[int, string]] {.async: (raises: []).} =
+  let a = (await Later.request(incf(x))).valueOr:
+    return err(error)
+  let b = (await Later.request(incf(incf(a)))).valueOr:
+    return err(error)
+  ok(incf(b))
 
-let messages =
-  [Message(payload: newSeq[byte](1024)), Message(payload: newSeq[byte](512))]
-let dupFan =
-  arr(
-    proc(m: Message): Pair[Message, Message] {.gcsafe, raises: [].} =
-      (fst: m, snd: m)
-  ) >>> (arr(payloadSize) *** arr(payloadSize))
-let fan = arr(payloadSize) &&& arr(payloadSize)
+let edges3Later = Later.arrow >>> Later.arrow >>> Later.arrow
+let mixedLater =
+  arr(incf) >>> Later.arrow >>> arr(incf) >>> arr(incf) >>> Later.arrow >>> arr(incf)
+let guardedLater = retry(within(Later.arrow, chronos.seconds(1)), 3).label("later")
 
-echo "fan-out of a 1 KiB message to two stages"
-bench("hand-written", N):
-  acc += payloadSize(messages[i and 1]) + payloadSize(messages[i and 1])
-bench("copying, arr dup >>> (f *** g)", N):
-  let p = dupFan(messages[i and 1]).get
-  acc += p.fst + p.snd
-bench("arrows (&&&)", N):
-  let p = fan(messages[i and 1]).get
-  acc += p.fst + p.snd
+echo "providers that wait one turn of the event loop"
+bench("bare edge", M):
+  acc += (await Later.request(i)).get
+bench("3 edges, hand-written", M):
+  acc += (await handEdgesLater(i)).get
+bench("3 edges, arrows", M):
+  acc += (await edges3Later(i)).get
+bench("4 pure stages and 2 edges, hand-written", M):
+  acc += (await handMixedLater(i)).get
+bench("4 pure stages and 2 edges, arrows", M):
+  acc += (await mixedLater(i)).get
+bench("label (retry (within edge)), arrows", M):
+  acc += (await guardedLater(i)).get

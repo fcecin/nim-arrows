@@ -171,7 +171,7 @@ suite "Edge.provide":
     check run(Vote.arrow(ctx), "x").get == @[Vote(who: "arrow:x")]
 
 suite "cancellation through an edge":
-  test "within stops a slow provider":
+  test "a cancel from within goes to the provider":
     scoped:
       let finished = new int
       discard SlowEcho.setProvider(

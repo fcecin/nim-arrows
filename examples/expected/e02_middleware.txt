@@ -1,9 +1,11 @@
-relay fails two times, and the third try works:
+The relay has no peers for two runs. The third run sends the message:
   sending m1
   ok(relay sent m1)
-relay fails all three tries, and lightpush answers:
-  sending m2
-  ok(lightpush sent m2)
-no provider at all:
+  relay runs: 3
+The relay refuses the message. No new run starts, and lightpush sends it:
+  sending a large message
+  ok(lightpush sent a large message)
+  relay runs: 1
+No edge has a provider. The last answer has the two error texts:
   sending m3
-  err(lightpush: RequestBroker(LightpushPublish): no provider registered for input signature)
+  ok(queued m3, because relay: RequestBroker(RelayPublish): no provider registered for input signature | lightpush: RequestBroker(LightpushPublish): no provider registered for input signature)

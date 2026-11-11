@@ -26,7 +26,7 @@ suite "both":
   test "both runs the two arrows at the same time":
     let t0 = Moment.now()
     let r = run(both(sleeper(plus1, 60), sleeper(times2, 60)), 5)
-    check r.get == (fst: 6, snd: 10)
+    check r.get == (6, 10)
     check elapsed(t0) < chronos.milliseconds(110)
 
   test "both stops at the first err and cancels the other arrow":
@@ -58,7 +58,7 @@ suite "both":
     check done[] == 0
 
 suite "all":
-  test "all keeps the order of the arrows":
+  test "all keeps the sequence of the arrows":
     let r = run(all(@[sleeper(plus1, 40), now(times2), later(pickyBase)]), 10)
     check r.get == @[11, 20, 7]
 
@@ -113,7 +113,7 @@ suite "firstOk":
 
   test "when all runs fail, the err holds all the texts":
     let r = run(firstOk(@[sleeper(failing, 10), now(failing)]), 7)
-    check r.error == "all failed: down 7 | down 7"
+    check r.error == "down 7 | down 7"
 
   test "an empty list gives err":
     check run(firstOk(newSeq[Arrow[int, int]]()), 1).error == "firstOk: no arrows"
@@ -121,10 +121,10 @@ suite "firstOk":
   test "when all runs fail at once, the answer is complete at once":
     let fut = firstOk(@[now(failing), now(failing)])(3)
     check fut.completed()
-    check fut.value().error == "all failed: down 3 | down 3"
+    check fut.value().error == "down 3 | down 3"
 
 suite "mapAll and mapSeq":
-  test "mapAll runs the items at the same time and keeps their order":
+  test "mapAll runs the items at the same time and keeps their sequence":
     let t0 = Moment.now()
     let r = run(mapAll(sleeper(times2, 60)), @[1, 2, 3, 4, 5])
     check r.get == @[2, 4, 6, 8, 10]
@@ -182,7 +182,7 @@ suite "a long list":
   # The runs finish one at a time, one for each turn of the event loop. A
   # wait that reads all the runs at each turn takes more than 30 s for a list
   # of 20000 runs. A wait that reads one run at each turn takes less than
-  # 0.5 s, so a slow machine also stays below the limit of 3 s.
+  # 0.5 s. Thus a slow machine also stays below the limit of 3 s.
   proc manual(futs: ref seq[Answer[int]]): Arrow[int, int] =
     ## An arrow whose answers `finishAll` completes.
     result = proc(x: int): Answer[int] =

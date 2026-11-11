@@ -1,12 +1,11 @@
-## `arrows` gives Hughes arrows to nim-brokers.
+## `arrows` gives each nim-brokers request its Kleisli arrow, and the
+## operations that compose and wrap arrows.
 ##
-## * `arrows/core` holds the arrow types, composition and products.
-## * `arrows/choice` holds branching.
+## * `arrows/core` holds the arrow types, composition and the fallback.
 ## * `arrows/transformers` holds the middleware tier.
 ## * `arrows/concurrent` holds concurrent runs.
-## * `arrows/loops` holds the loop in one run and the feedback between runs.
 ## * `arrows/brokers` holds the bridge to request and event brokers.
 
-import arrows/[core, choice, transformers, concurrent, loops, brokers]
+import arrows/[core, transformers, concurrent, brokers]
 
-export core, choice, transformers, concurrent, loops, brokers
+export core, transformers, concurrent, brokers

@@ -32,6 +32,16 @@ proc failure*[B](f: Answer[B]): string {.inline.} =
   else:
     "cancelled"
 
+proc joinErrors*(a, b: string): string =
+  ## The error text of two failures, in the sequence of the stages. An empty
+  ## text adds nothing.
+  if a.len == 0:
+    b
+  elif b.len == 0:
+    a
+  else:
+    a & " | " & b
+
 template waitStage*(fut, cancelled: untyped) =
   ## Waits until the `Answer` `fut` finishes, in a `raises: []` async proc.
   ## `fut` must be a variable. A plain `await` sends a cancel of the proc to

@@ -1,15 +1,18 @@
-## Routing, hedged requests and fan-out.
+## Many providers of one edge.
 ##
 ## Three store nodes provide the same edge `StoreQuery`. Each node has its own
-## broker context, which is its address. The nodes have different delays.
+## broker context, which is its address. `StoreQuery.arrow(ctx)` is the edge
+## to one node. The nodes answer after different times.
 ##
-## * `|||` selects a route from the shape of the message.
-## * `firstOk` sends the query to all the store nodes and keeps the first
-##   `ok`. The slower runs get a cancel.
+## * `firstOk` asks all the nodes and keeps the first `ok`. The other runs get
+##   a cancel.
 ## * `all` asks all the nodes and keeps all the answers.
-## * `mapAll` publishes a batch of messages at the same time.
+## * `both` asks two nodes and gives the two answers as a tuple.
+## * `mapAll` publishes a list of messages at the same time.
+## * `mapSeq` publishes a list of messages one after the other.
+## * A proc with the shape of an arrow selects an edge from the message.
 ##
-## Run: nim c -r examples/e04_routing.nim
+## Run it with `nim c -r examples/e04_routing.nim`.
 
 import std/[sequtils, strutils]
 import ../arrows
@@ -32,6 +35,16 @@ proc startStore(ctx: BrokerContext, name: string, delayMs: int) =
   )
 
 proc main() =
+  let addrs = @[NewBrokerContext(), NewBrokerContext(), NewBrokerContext()]
+  startStore(addrs[0], "store-a", 80)
+  startStore(addrs[1], "store-b", 10)
+  startStore(addrs[2], "store-c", 40)
+  let stores = addrs.mapIt(StoreQuery.arrow(it))
+
+  echo "first answer: ", waitFor firstOk(stores)("/news")
+  echo "all answers: ", waitFor all(stores)("/news")
+  echo "two answers: ", waitFor both(stores[0], stores[1])("/news")
+
   discard RelayPublish.setProvider(
     proc(msg: string): Future[Result[string, string]] {.async.} =
       ok("relay: " & msg)
@@ -40,33 +53,17 @@ proc main() =
     proc(msg: string): Future[Result[string, string]] {.async.} =
       ok("lightpush: " & msg.len.intToStr & " bytes")
   )
+  echo "at the same time: ", waitFor mapAll(RelayPublish.arrow)(@["m1", "m2", "m3"])
+  echo "one after the other: ", waitFor mapSeq(RelayPublish.arrow)(@["m4", "m5"])
 
-  # Routes from the shape of the message.
-  let classify = arr(
-    proc(msg: string): Either[string, string] {.gcsafe, raises: [].} =
-      if msg.len <= 16:
-        toLeft[string, string](msg)
-      else:
-        toRight[string, string](msg)
-  )
-  let route = classify >>> (RelayPublish.arrow ||| LightpushPublish.arrow)
+  # A stage that selects an edge is usual Nim code.
+  let route: Arrow[string, string] = proc(
+      msg: string
+  ): Future[Result[string, string]] {.async: (raises: []).} =
+    if msg.len <= 16:
+      return await RelayPublish.request(msg)
+    return await LightpushPublish.request(msg)
   echo waitFor route("short message")
   echo waitFor route("a much longer message for lightpush")
-
-  # Three store nodes, each at its own address.
-  let addrs = @[NewBrokerContext(), NewBrokerContext(), NewBrokerContext()]
-  startStore(addrs[0], "store-a", 80)
-  startStore(addrs[1], "store-b", 10)
-  startStore(addrs[2], "store-c", 40)
-  let nodes = addrs.mapIt(StoreQuery.arrow(it))
-
-  let hedged = firstOk(nodes)
-  echo "first answer: ", waitFor hedged("/news")
-
-  let everyone = all(nodes)
-  echo "all answers: ", waitFor everyone("/news")
-
-  let batch = mapAll(RelayPublish.arrow)
-  echo "batch: ", waitFor batch(@["m1", "m2", "m3"])
 
 main()

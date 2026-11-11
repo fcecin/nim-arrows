@@ -5,7 +5,7 @@
 ## run goes to the error sink. The listener of `MessageStored` is plain
 ## nim-brokers code.
 ##
-## Run: nim c -r examples/e03_events.nim
+## Run it with `nim c -r examples/e03_events.nim`.
 
 import ../arrows
 

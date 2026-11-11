@@ -1,15 +1,14 @@
-## From brokers to arrows.
+## A new edge from three edges.
 ##
-## The request brokers below are edges. In a real program, each edge is in an
-## edge module, and node modules import it. In this example, all the parts are
-## in one file.
+## `Validate`, `Stamp` and `Publish` are request brokers. Each one has a plain
+## nim-brokers provider. One line composes the three brokers into the provider
+## of a fourth broker, `Send`. The compiler makes sure that the output type of
+## each edge is the input type of the next edge.
 ##
-## The providers are plain nim-brokers code. They do not know about arrows.
-## Only the composition site uses arrows. It makes the new edge `Send` from
-## three edges. A caller of `Send` uses `Send.request` and does not know about
-## arrows either.
+## A caller of `Send` sees a broker. It does not see the composition. The
+## three providers do not see it either.
 ##
-## Run: nim c -r examples/e01_edges.nim
+## Run it with `nim c -r examples/e01_edges.nim`.
 
 import ../arrows
 
@@ -35,7 +34,6 @@ RequestBroker:
   proc Send(env: Envelope): Future[Result[string, string]] {.async.}
 
 proc startProviders() =
-  ## Three nodes, written as plain nim-brokers providers.
   discard Validate.setProvider(
     proc(env: Envelope): Result[Envelope, string] =
       if env.topic.len == 0:
@@ -54,15 +52,10 @@ proc startProviders() =
       ok("published #" & $msg.seqNo & " on " & msg.env.topic)
   )
 
-proc startComposer() =
-  ## The composition site. The compiler checks each seam. The output type of
-  ## each edge must be the input type of the next edge.
-  doAssert Send.provide(Validate.arrow >>> Stamp.arrow >>> Publish.arrow).isOk
-
 proc main() =
   startProviders()
-  startComposer()
-  # A caller that knows only the edge `Send`.
+  doAssert Send.provide(Validate.arrow >>> Stamp.arrow >>> Publish.arrow).isOk
+
   echo waitFor Send.request(Envelope(topic: "/news/1", payload: "hello"))
   echo waitFor Send.request(Envelope(topic: "/news/1", payload: "again"))
   echo waitFor Send.request(Envelope(topic: "", payload: "lost"))

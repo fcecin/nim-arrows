@@ -2,7 +2,7 @@
 ##
 ## * `both` runs two arrows on the same input.
 ## * `all` runs a list of arrows on the same input.
-## * `firstOk` runs a list of arrows and keeps the first `ok` (a hedged call).
+## * `firstOk` runs a list of arrows and keeps the first `ok` (a race).
 ## * `mapAll` runs one arrow on each item of a list.
 ##
 ## `mapSeq` is the sequential twin of `mapAll`. It runs the items one after
@@ -10,15 +10,15 @@
 ##
 ## Fail fast. When one run of `both`, `all` or `mapAll` gives `err`, the
 ## combinator cancels the runs that did not finish and gives that `err`. When
-## `firstOk` gets an `ok`, it cancels the other runs. A cancelled broker
-## request stops its provider.
+## `firstOk` gets an `ok`, it cancels the other runs. A broker request that
+## gets a cancel sends the cancel to its provider. The combinator does not
+## wait until a cancelled run stops.
 ##
 ## When a run of `both`, `all`, `firstOk` or `mapAll` must wait, the
-## combinator makes one future for its answer, and puts one callback on each
-## run. The wait takes O(n) time for a list of n runs. `mapSeq` waits for one
-## item at a time in an async proc.
+## combinator makes one future for its answer. It puts one callback on each
+## run, so the wait takes O(n) time for a list of n runs. `mapSeq` waits for
+## one item at a time in an async proc.
 
-import std/strutils
 import ./core, ./private/answers
 
 # --- Helpers ------------------------------------------------------------------
@@ -49,10 +49,10 @@ proc valuesOf[B](runs: openArray[Answer[B]]): Result[seq[B], string] =
   ok(values)
 
 proc allFailed[B](runs: openArray[Answer[B]]): Result[B, string] =
-  var errors: seq[string]
+  var text = ""
   for f in runs:
-    errors.add(f.failure)
-  err("all failed: " & errors.join(" | "))
+    text = joinErrors(text, f.failure)
+  err(text)
 
 proc gatherSlow[B](runs: sink seq[Answer[B]]): Answer[seq[B]] =
   let res = Answer[seq[B]].init("arrows.gather", {FutureFlag.OwnCancelSchedule})
@@ -131,10 +131,10 @@ proc firstOkSlow[B](runs: sink seq[Answer[B]]): Answer[B] =
 
 # --- both ---------------------------------------------------------------------
 
-proc bothSlow[B, C](fb: Answer[B], fc: Answer[C]): Answer[Pair[B, C]] =
+proc bothSlow[B, C](fb: Answer[B], fc: Answer[C]): Answer[(B, C)] =
   # The callbacks of the two runs have `nil` as their `udata`. Each callback
   # reads the two runs.
-  let res = Answer[Pair[B, C]].init("arrows.both", {FutureFlag.OwnCancelSchedule})
+  let res = Answer[(B, C)].init("arrows.both", {FutureFlag.OwnCancelSchedule})
   var self {.cursor.}: CallbackFunc
   proc stop() =
     if not fb.finished():
@@ -150,19 +150,17 @@ proc bothSlow[B, C](fb: Answer[B], fc: Answer[C]): Answer[Pair[B, C]] =
       return
     if fb.finished() and fb.failed:
       stop()
-      res.complete(Result[Pair[B, C], string].err(fb.failure))
+      res.complete(Result[(B, C), string].err(fb.failure))
     elif fc.finished() and fc.failed:
       stop()
-      res.complete(Result[Pair[B, C], string].err(fc.failure))
+      res.complete(Result[(B, C), string].err(fc.failure))
     elif fb.finished() and fc.finished():
       self = nil
-      res.complete(
-        Result[Pair[B, C], string].ok((fst: fb.value().get, snd: fc.value().get))
-      )
+      res.complete(Result[(B, C), string].ok((fb.value().get, fc.value().get)))
 
   proc onCancel(udata: pointer) {.gcsafe, raises: [].} =
     stop()
-    res.complete(Result[Pair[B, C], string].err("cancelled"))
+    res.complete(Result[(B, C), string].err("cancelled"))
 
   self = onRun
   if not fb.finished():
@@ -172,31 +170,29 @@ proc bothSlow[B, C](fb: Answer[B], fc: Answer[C]): Answer[Pair[B, C]] =
   res.cancelCallback = onCancel
   res
 
-proc both*[A, B, C](f: Arrow[A, B], g: Arrow[A, C]): Arrow[A, Pair[B, C]] =
-  ## Starts `f` and `g` at the same time on the same input, and pairs the two
-  ## results. This is the concurrent form of `&&&`.
-  result = proc(a: A): Answer[Pair[B, C]] {.gcsafe, raises: [].} =
+proc both*[A, B, C](f: Arrow[A, B], g: Arrow[A, C]): Arrow[A, (B, C)] =
+  ## Starts `f` and `g` at the same time on the same input, and gives the two
+  ## results as a tuple.
+  result = proc(a: A): Answer[(B, C)] {.gcsafe, raises: [].} =
     let fb = f(a)
     let fc = g(a)
     if fb.finished() and fb.failed:
       if not fc.finished():
         fc.cancelSoon()
-      return answer(Result[Pair[B, C], string].err(fb.failure))
+      return answer(Result[(B, C), string].err(fb.failure))
     if fc.finished() and fc.failed:
       if not fb.finished():
         fb.cancelSoon()
-      return answer(Result[Pair[B, C], string].err(fc.failure))
+      return answer(Result[(B, C), string].err(fc.failure))
     if fb.finished() and fc.finished():
-      return answer(
-        Result[Pair[B, C], string].ok((fst: fb.value().get, snd: fc.value().get))
-      )
+      return answer(Result[(B, C), string].ok((fb.value().get, fc.value().get)))
     bothSlow[B, C](fb, fc)
 
 # --- all, firstOk, mapAll, mapSeq ---------------------------------------------
 
 proc all*[A, B](arrows: seq[Arrow[A, B]]): Arrow[A, seq[B]] =
   ## Starts all the arrows at the same time on the same input. The values come
-  ## in the order of `arrows`. An empty list gives an empty list.
+  ## in the sequence of `arrows`. An empty list gives an empty list.
   let fs = arrows
   result = proc(a: A): Answer[seq[B]] {.gcsafe, raises: [].} =
     var futs = newSeqOfCap[Answer[B]](fs.len)
@@ -207,8 +203,11 @@ proc all*[A, B](arrows: seq[Arrow[A, B]]): Arrow[A, seq[B]] =
 proc firstOk*[A, B](arrows: seq[Arrow[A, B]]): Arrow[A, B] =
   ## Starts all the arrows at the same time on the same input. The first `ok`
   ## is the answer, and the other runs get a cancel. When all the runs fail,
-  ## the answer is an `err` that holds all the error texts. An empty list
-  ## gives `err`.
+  ## the answer is an `err` that has all the error texts, as `orElse` gives
+  ## them. An empty list gives `err`.
+  ##
+  ## Each call starts one run for each arrow. Use `firstOk` only for requests
+  ## that are safe to do more than one time.
   let fs = arrows
   result = proc(a: A): Answer[B] {.gcsafe, raises: [].} =
     if fs.len == 0:
@@ -229,7 +228,7 @@ proc firstOk*[A, B](arrows: seq[Arrow[A, B]]): Arrow[A, B] =
 
 proc mapAll*[A, B](f: Arrow[A, B]): Arrow[seq[A], seq[B]] =
   ## Starts `f` on all the items of the input list at the same time. The
-  ## values come in the order of the items.
+  ## values come in the sequence of the items.
   result = proc(items: seq[A]): Answer[seq[B]] {.gcsafe, raises: [].} =
     var futs = newSeqOfCap[Answer[B]](items.len)
     for item in items:

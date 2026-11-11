@@ -1,9 +1,9 @@
 import std/strutils
 
 # Package
-version = "0.1.0"
+version = "0.2.0"
 author = "Fabiana Cecin"
-description = "Hughes arrows for nim-brokers, with typed connections that compose."
+description = "Kleisli arrows for nim-brokers requests, with composition and middleware."
 license = "Unlicense"
 skipDirs = @["tests", "examples", "benchmarks"]
 
@@ -15,7 +15,7 @@ requires "brokers >= 3.4.0"
 
 const tests = [
   "test_laws", "test_combinators", "test_transformers", "test_concurrent", "test_brokers",
-  "test_edges", "test_loops", "test_threads", "test_cancel", "test_scope", "test_readme",
+  "test_edges", "test_threads", "test_cancel", "test_scope", "test_readme",
 ]
 
 task test, "Run the test suites":
@@ -23,7 +23,7 @@ task test, "Run the test suites":
     exec "nim c -r --outdir:build --hints:off tests/" & t & ".nim"
 
 task examples, "Compile and run the examples, and compare their output":
-  for ex in ["e01_edges", "e02_middleware", "e03_events", "e04_routing", "e05_loops"]:
+  for ex in ["e01_edges", "e02_middleware", "e03_events", "e04_routing", "e05_links"]:
     exec "nim c --outdir:build --hints:off examples/" & ex & ".nim"
     let (output, code) = gorgeEx("build/" & ex)
     if code != 0:

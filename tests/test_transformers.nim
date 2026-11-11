@@ -11,6 +11,16 @@ proc flaky(calls: ref int, failures: int): Arrow[int, int] =
       return err("transient " & $calls[])
     return ok(x * 10)
 
+proc scripted(calls: ref int, errors: seq[string]): SyncArrow[int, int] =
+  ## Gives `err` with the next text of `errors` for each call, and `ok(x)`
+  ## after them.
+  result = proc(x: int): Result[int, string] =
+    inc calls[]
+    if calls[] <= errors.len:
+      err(errors[calls[] - 1])
+    else:
+      ok(x)
+
 suite "tap and ensure":
   test "tap sees the value between two stages":
     scoped:
@@ -100,6 +110,50 @@ suite "retry":
     check run(retry(flaky(calls, 2), 3, chronos.milliseconds(20), 2), 1).get == 10
     # The pauses are 20 ms and then 40 ms.
     check Moment.now() - t0 >= chronos.milliseconds(55)
+
+suite "retry with retryIf":
+  let busy: RetryIf = proc(e: string): bool =
+    e.startsWith("busy")
+
+  test "retry stops at an error that retryIf refuses":
+    let calls = new int
+    eachFlavor(f, scripted(calls, @["busy 1", "busy 2", "no topic", "busy 4"])):
+      calls[] = 0
+      check run(retry(f, 10, retryIf = busy), 1).error == "no topic"
+      check calls[] == 3
+
+  test "retry makes one run when retryIf refuses the first error":
+    let calls = new int
+    eachFlavor(f, scripted(calls, @["no topic", "busy 2"])):
+      calls[] = 0
+      check run(retry(f, 10, retryIf = busy), 1).error == "no topic"
+      check calls[] == 1
+
+  test "retry goes on while retryIf accepts the errors":
+    let calls = new int
+    eachFlavor(f, scripted(calls, @["busy 1", "busy 2"])):
+      calls[] = 0
+      check run(retry(f, 10, retryIf = busy), 7).get == 7
+      check calls[] == 3
+
+  test "attempts is the limit also with retryIf":
+    let calls = new int
+    eachFlavor(f, scripted(calls, @["busy 1", "busy 2", "busy 3", "busy 4"])):
+      calls[] = 0
+      check run(retry(f, 2, retryIf = busy), 1).error == "busy 2"
+      check calls[] == 2
+
+  test "retryIf goes with a pause":
+    let calls = new int
+    let f = retry(
+      later(scripted(calls, @["busy 1", "no topic"])),
+      10,
+      chronos.milliseconds(5),
+      2,
+      busy,
+    )
+    check run(f, 1).error == "no topic"
+    check calls[] == 2
 
 suite "recover, mapErr and label":
   test "recover gives a value in place of an error":

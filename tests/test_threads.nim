@@ -25,8 +25,14 @@ proc pipelineWorker() {.thread.} =
   gDone.store(true)
 
 proc failingWorker() {.thread.} =
-  let r = waitFor (MtDouble.arrow <+> zeroArrow[int, int]("no provider"))(1)
-  gFellBack.store(r.isErr and r.error == "no provider")
+  # The edge has no provider, so the fallback of this thread answers.
+  let r = waitFor MtDouble.arrow.orElse(
+    arr(
+      proc(x: int): int =
+        -x
+    )
+  )(1)
+  gFellBack.store(r.isOk and r.get == -1)
   gDone.store(true)
 
 proc runInThread(worker: proc() {.thread, nimcall.}): bool =
@@ -51,6 +57,6 @@ suite "threads":
     check gResult.load() == 24
     MtDouble.clearProvider()
 
-  test "an mt edge without a provider gives err in the other thread":
+  test "an mt edge without a provider gives err, and a fallback answers":
     check runInThread(failingWorker)
     check gFellBack.load()

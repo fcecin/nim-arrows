@@ -60,7 +60,8 @@ proc syncAnswerOf*[A, B](
 # overloads of `setProvider` hold it in their `handler` parameter. The macros
 # find the overload `setProvider(_: typedesc[E], handler: H)` among the
 # overloads that the call site sees, and read the provider type `H`. A
-# resolved symbol is usable across modules, also when it is not exported.
+# resolved symbol is usable across modules, also when its module does not
+# export it.
 
 proc typeName(E: NimNode): string =
   let t = E.getTypeInst
@@ -301,7 +302,7 @@ proc finishedRun(): Future[void].Raising([]) =
   result.complete()
 
 proc driveHandler[E, F](f: F, onError: ErrorSink): auto =
-  # The listener is not an async proc. A run that is done gives a completed
+  # The listener is not an async proc. A finished run gives a completed
   # future. A run that waits gives a future that a callback on the run
   # completes. Thus the listener makes a smaller number of futures than an
   # async proc that awaits the run.

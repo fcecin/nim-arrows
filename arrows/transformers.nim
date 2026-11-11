@@ -38,6 +38,8 @@ proc timedSlow[B](
 proc timed*[A, B](
     f: SyncArrow[A, B], report: proc(d: Duration) {.gcsafe, raises: [].}
 ): SyncArrow[A, B] =
+  ## Runs `f` and calls `report` with the time from the call to the answer. A
+  ## run that gets a cancel also calls `report`.
   result = proc(a: A): Result[B, string] {.gcsafe, raises: [].} =
     let t0 = Moment.now()
     result = f(a)
@@ -46,7 +48,6 @@ proc timed*[A, B](
 proc timed*[A, B](
     f: Arrow[A, B], report: proc(d: Duration) {.gcsafe, raises: [].}
 ): Arrow[A, B] =
-  ## Runs `f` and calls `report` with the time from the call to the answer.
   result = proc(a: A): Answer[B] {.gcsafe, raises: [].} =
     let t0 = Moment.now()
     let fb = f(a)
@@ -57,12 +58,22 @@ proc timed*[A, B](
 
 # --- retry --------------------------------------------------------------------
 
-proc retry*[A, B](f: SyncArrow[A, B], attempts: int): SyncArrow[A, B] =
-  ## The sync form has no pause between the runs.
+type RetryIf* = proc(e: string): bool {.gcsafe, raises: [].}
+  ## Gets the error text of a failed run. `retry` starts a new run only when
+  ## this proc gives true.
+
+proc again(retryIf: RetryIf, e: string): bool {.inline.} =
+  retryIf.isNil or retryIf(e)
+
+proc retry*[A, B](
+    f: SyncArrow[A, B], attempts: int, retryIf: RetryIf = nil
+): SyncArrow[A, B] =
+  ## Runs `f` a maximum of `attempts` times, with no pause between the runs.
+  ## See the async form for the other rules.
   result = proc(a: A): Result[B, string] {.gcsafe, raises: [].} =
     result = f(a)
     var n = 1
-    while result.isErr and n < attempts:
+    while result.isErr and n < attempts and again(retryIf, result.error):
       result = f(a)
       inc n
 
@@ -73,6 +84,7 @@ proc retrySlow[A, B](
     attempts: int,
     backoff: Duration,
     factor: int,
+    retryIf: RetryIf,
 ): Future[Result[B, string]] {.async: (raises: []).} =
   var cancelled = false
   var fut = first
@@ -82,7 +94,7 @@ proc retrySlow[A, B](
     waitStage(fut, cancelled)
     if cancelled:
       return err("cancelled")
-    if not fut.failed or n >= attempts:
+    if not fut.failed or n >= attempts or not again(retryIf, fut.failure):
       return outcome(fut)
     if pause > ZeroDuration:
       let slept = sleepAsync(pause)
@@ -94,17 +106,28 @@ proc retrySlow[A, B](
     inc n
 
 proc retry*[A, B](
-    f: Arrow[A, B], attempts: int, backoff = ZeroDuration, factor = 1
+    f: Arrow[A, B],
+    attempts: int,
+    backoff = ZeroDuration,
+    factor = 1,
+    retryIf: RetryIf = nil,
 ): Arrow[A, B] =
   ## Runs `f` a maximum of `attempts` times. It stops at the first `ok`. An
   ## `attempts` value less than 1 gives one run. A pause of `backoff` comes
   ## before the second run. Each pause after it is `factor` times the pause
   ## before it. When all the runs fail, the last `err` is the answer.
+  ##
+  ## Without `retryIf`, each `err` starts a new run. With `retryIf`, an `err`
+  ## starts a new run only when `retryIf` gives true for its error text. Use
+  ## it to stop at an error that a new run can not remove.
+  ##
+  ## An `err` does not show that the run did nothing. Use `retry` only for
+  ## requests that are safe to do more than one time.
   result = proc(a: A): Answer[B] {.gcsafe, raises: [].} =
     let fb = f(a)
     if fb.completed() and (fb.value().isOk or attempts <= 1):
       return fb
-    retrySlow[A, B](f, a, fb, attempts, backoff, factor)
+    retrySlow[A, B](f, a, fb, attempts, backoff, factor, retryIf)
 
 # --- recover, mapErr, label ---------------------------------------------------
 
@@ -215,7 +238,12 @@ proc withinSlow[B](
 proc within*[A, B](f: Arrow[A, B], timeout: Duration): Arrow[A, B] =
   ## Gives `f` a time limit. When `f` does not answer in time, this proc
   ## cancels `f` and answers `err("timed out after ...")`. A broker request
-  ## that gets a cancel stops its provider.
+  ## that gets a cancel sends the cancel to its provider.
+  ##
+  ## The answer comes at the time limit. It does not wait until `f` stops. The
+  ## work that `f` did before the cancel stays done. Thus a `retry` or a
+  ## fallback after `within` can start a new run before the cancelled run
+  ## stops.
   result = proc(a: A): Answer[B] {.gcsafe, raises: [].} =
     let fb = f(a)
     if fb.completed():
